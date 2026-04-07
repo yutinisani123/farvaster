@@ -26,44 +26,25 @@ type ModuleKey = "plinks" | "custom";
 type TransactionStatus = "idle" | "running" | "success" | "error";
 
 type PlinksReserveResponse = {
-  success: boolean;
-  pack: {
-    id: string;
-    packTypeId: string;
-    status: string;
-    reservedBy: string;
-    reservedAt: string;
-  };
-};
-
-type PlinksStartResponse = {
-  gameState: {
-    id: string;
-    status: string;
-    dropIndex: number;
-    totalDrops: number;
-    boardCoins: number[];
-    prizes: Array<{
-      coinIndex: number;
-      quantity: number;
-      type: string;
-    }>;
-    coins: Array<{
-      symbol: string;
-      image: string;
-      currentPrice: number;
-    }>;
-    randomizer: string;
-    centerSlotType: string;
+  success?: boolean;
+  pack?: {
+    id?: string;
+    packTypeId?: string;
+    status?: string;
+    reservedBy?: string;
+    reservedAt?: string;
   };
 };
 
 type PlinksDropResponse = {
-  gameState: PlinksStartResponse["gameState"];
-  signature: string;
-  transactionData: `0x${string}`;
-  totalValue: number;
-  points: number;
+  signature?: string;
+  transactionData?: `0x${string}`;
+  totalValue?: number;
+  points?: number;
+  gameState?: {
+    id?: string;
+    status?: string;
+  };
 };
 
 const defaultRpc = "https://mainnet.base.org";
@@ -115,6 +96,12 @@ export function AutomationDashboard() {
     "Preset Plinks siap. Kamu juga bisa pakai mode custom untuk tx EVM lain.",
   );
   const [plinksLog, setPlinksLog] = useState<string[]>([]);
+  const [plinksBearer, setPlinksBearer] = useState("");
+  const [plinksReserveJson, setPlinksReserveJson] = useState("");
+  const [plinksDropJson, setPlinksDropJson] = useState("");
+  const [plinksPackId, setPlinksPackId] = useState("");
+  const [plinksTx1Hash, setPlinksTx1Hash] = useState("");
+  const [plinksTx2Hash, setPlinksTx2Hash] = useState("");
 
   const selectedAccount = useMemo(
     () => accounts.find((item) => item.id === selectedAccountId) ?? null,
@@ -190,6 +177,31 @@ export function AutomationDashboard() {
     setSessionMessage("Semua akun session dibersihkan dari memori tab ini.");
   }
 
+  function parseReserveJson() {
+    const parsed = JSON.parse(plinksReserveJson) as PlinksReserveResponse;
+    const packId = parsed.pack?.id;
+
+    if (!packId) {
+      throw new Error("Reserve JSON tidak mengandung pack.id.");
+    }
+
+    setPlinksPackId(packId);
+    addLog(`Pack ID terdeteksi: ${packId}`);
+    return packId;
+  }
+
+  function parseDropJson() {
+    const parsed = JSON.parse(plinksDropJson) as PlinksDropResponse;
+
+    if (!parsed.transactionData || !/^0x[0-9a-fA-F]+$/.test(parsed.transactionData)) {
+      throw new Error("Drop JSON tidak mengandung transactionData yang valid.");
+    }
+
+    setCalldata(parsed.transactionData);
+    addLog("transactionData tx2 berhasil dimuat dari drop JSON.");
+    return parsed;
+  }
+
   async function runCustomTransaction() {
     const account = getActiveAccount();
 
@@ -229,110 +241,120 @@ export function AutomationDashboard() {
     setTxMessage(`Custom tx sukses untuk ${selectedAccount?.label}.`);
   }
 
-  async function runPlinksFlow() {
-    if (!selectedAccount) {
-      throw new Error("Pilih akun dulu.");
-    }
-
+  async function sendPlinksTx1() {
     const account = getActiveAccount();
-    const walletAddress = account.address;
-    const authToken = selectedAccount.secret.trim();
-
-    addLog("1. Reserving free pack...");
-    const reserveResponse = await fetch("https://plinks.app/api/packs/reserve/free", {
-      method: "GET",
-      headers: {
-        Accept: "application/json",
-        Authorization: `Bearer ${authToken}`,
-      },
-    });
-
-    if (!reserveResponse.ok) {
-      throw new Error("Reserve free pack gagal. Periksa token/session Plinks.");
-    }
-
-    const reserve = (await reserveResponse.json()) as PlinksReserveResponse;
-    const packId = reserve.pack.id;
-    addLog(`Reserved pack ${packId}`);
-
+    const packId = plinksPackId || parseReserveJson();
     const walletClient = createWalletClient({
       account,
       chain: undefined,
       transport: http(rpcUrl.trim()),
     });
-
     const publicClient = createPublicClient({
       transport: http(rpcUrl.trim()),
     });
-
     const tx1Data = encodeFunctionData({
       abi: plinksAbi,
       functionName: "claimFreePack",
       args: [packId],
     });
-
-    addLog("2. Sending tx1 claimFreePack...");
-    const tx1Hash = await walletClient.sendTransaction({
+    addLog("Mengirim tx1 claimFreePack...");
+    const hash = await walletClient.sendTransaction({
       account,
       chain: undefined,
       to: plinksContract,
       data: tx1Data,
       value: 0n,
     });
-    await publicClient.waitForTransactionReceipt({ hash: tx1Hash });
-    addLog(`Tx1 confirmed: ${tx1Hash}`);
+    await publicClient.waitForTransactionReceipt({ hash });
+    setPlinksTx1Hash(hash);
+    addLog(`Tx1 confirmed: ${hash}`);
+    return hash;
+  }
 
-    addLog("3. Starting game state...");
-    const startResponse = await fetch(`https://plinks.app/api/game/${packId}/start`, {
-      method: "POST",
-      headers: {
-        Accept: "application/json",
-        Authorization: `Bearer ${authToken}`,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({ walletAddress }),
+  async function sendPlinksTx2() {
+    const account = getActiveAccount();
+    const drop = parseDropJson();
+    const walletClient = createWalletClient({
+      account,
+      chain: undefined,
+      transport: http(rpcUrl.trim()),
     });
-
-    if (!startResponse.ok) {
-      throw new Error("Game start gagal.");
-    }
-
-    await startResponse.json() as PlinksStartResponse;
-
-    addLog("4. Dropping game...");
-    const dropResponse = await fetch(`https://plinks.app/api/game/${packId}/drop`, {
-      method: "POST",
-      headers: {
-        Accept: "application/json",
-        Authorization: `Bearer ${authToken}`,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({ walletAddress }),
+    const publicClient = createPublicClient({
+      transport: http(rpcUrl.trim()),
     });
-
-    if (!dropResponse.ok) {
-      throw new Error("Game drop gagal.");
-    }
-
-    const drop = (await dropResponse.json()) as PlinksDropResponse;
-    addLog(`Reward points: ${drop.points}, estimated value: ${drop.totalValue}`);
-
-    addLog("5. Sending tx2 reward claim...");
-    const tx2Hash = await walletClient.sendTransaction({
+    addLog("Mengirim tx2 reward claim...");
+    const hash = await walletClient.sendTransaction({
       account,
       chain: undefined,
       to: plinksContract,
       data: drop.transactionData,
       value: 0n,
     });
-    await publicClient.waitForTransactionReceipt({ hash: tx2Hash });
-    addLog(`Tx2 confirmed: ${tx2Hash}`);
-
-    setTxHash(tx2Hash);
+    await publicClient.waitForTransactionReceipt({ hash });
+    setPlinksTx2Hash(hash);
+    setTxHash(hash);
     setToAddress(plinksContract);
     setEthValue("0");
-    setCalldata(drop.transactionData);
-    setTxMessage(`Plinks flow sukses. Pack ${packId} selesai diproses.`);
+    setTxMessage(`Tx2 sukses untuk pack ${plinksPackId || drop.gameState?.id || "unknown"}.`);
+    addLog(`Tx2 confirmed: ${hash}`);
+    return hash;
+  }
+
+  async function handleReservePackId() {
+    try {
+      setTxStatus("idle");
+      const packId = parseReserveJson();
+      setTxMessage(`Pack ID siap: ${packId}`);
+    } catch (error) {
+      setTxStatus("error");
+      setTxMessage(getErrorMessage(error));
+      addLog(getErrorMessage(error));
+    }
+  }
+
+  async function handleLoadTx2Data() {
+    try {
+      setTxStatus("idle");
+      const drop = parseDropJson();
+      setTxMessage(
+        `Tx2 payload siap. Points: ${drop.points ?? "-"}, estimated value: ${drop.totalValue ?? "-"}`,
+      );
+    } catch (error) {
+      setTxStatus("error");
+      setTxMessage(getErrorMessage(error));
+      addLog(getErrorMessage(error));
+    }
+  }
+
+  async function handlePlinksStep(action: "tx1" | "tx2" | "full") {
+    try {
+      setTxStatus("running");
+      setTxHash("");
+
+      if (!rpcUrl.trim()) {
+        throw new Error("RPC URL wajib diisi.");
+      }
+
+      if (action === "tx1") {
+        const hash = await sendPlinksTx1();
+        setTxHash(hash);
+        setTxMessage("Tx1 sukses. Lanjutkan game manual di Plinks lalu ambil drop JSON untuk tx2.");
+      } else if (action === "tx2") {
+        const hash = await sendPlinksTx2();
+        setTxHash(hash);
+      } else {
+        const tx1Hash = await sendPlinksTx1();
+        const tx2Hash = await sendPlinksTx2();
+        setTxHash(tx2Hash);
+        setTxMessage(`Flow manual-complete sukses. Tx1: ${tx1Hash}, Tx2: ${tx2Hash}`);
+      }
+
+      setTxStatus("success");
+    } catch (error) {
+      setTxStatus("error");
+      setTxMessage(getErrorMessage(error));
+      addLog(getErrorMessage(error));
+    }
   }
 
   async function handleRunTransaction() {
@@ -345,7 +367,7 @@ export function AutomationDashboard() {
       }
 
       if (moduleKey === "plinks") {
-        await runPlinksFlow();
+        throw new Error("Untuk module Plinks, jalankan step per step di panel workflow.");
       } else {
         await runCustomTransaction();
       }
@@ -400,8 +422,8 @@ export function AutomationDashboard() {
               <section className="card info-card">
                 <h2 className="card-title">Import akun</h2>
                 <p className="card-copy">
-                  Untuk mode Plinks saat ini, field secret dipakai sebagai
-                  mnemonic/private key akun yang akan menandatangani tx.
+                  Untuk mode Plinks, field secret dipakai sebagai
+                  mnemonic/private key akun yang akan menandatangani tx onchain.
                 </p>
                 <div className="stack">
                   <div className="kv">
@@ -484,9 +506,9 @@ export function AutomationDashboard() {
             <section className="card action-card">
               <h2 className="card-title">Module runner</h2>
               <p className="card-copy">
-                Preset `Plinks` sekarang sudah tahu flow dua tx: reserve free
-                pack, `claimFreePack(packId)`, lanjut `drop`, lalu kirim tx2
-                dari `transactionData` yang diberikan backend Plinks.
+                Preset `Plinks` sekarang dibuat sebagai workflow steps. Step API
+                tetap kamu ambil/manual dari DevTools Plinks, lalu tool ini
+                menangani step onchain yang relevan.
               </p>
               <div className="stack">
                 <div className="kv">
@@ -500,6 +522,65 @@ export function AutomationDashboard() {
                     <option value="custom">Custom EVM transaction</option>
                   </select>
                 </div>
+                {moduleKey === "plinks" ? (
+                  <>
+                    <div className="kv">
+                      <span className="kv-label">Plinks bearer token (opsional catatan)</span>
+                      <input
+                        className="field"
+                        value={plinksBearer}
+                        onChange={(event) => setPlinksBearer(event.target.value)}
+                        placeholder="Tidak dipakai otomatis, hanya catatan session"
+                      />
+                    </div>
+                    <div className="kv">
+                      <span className="kv-label">Step 1 input: reserve response JSON</span>
+                      <textarea
+                        className="field field-area"
+                        value={plinksReserveJson}
+                        onChange={(event) => setPlinksReserveJson(event.target.value)}
+                        placeholder='Paste response dari /api/packs/reserve/free'
+                      />
+                    </div>
+                    <div className="button-row">
+                      <button className="button secondary" type="button" onClick={handleReservePackId}>
+                        Parse Pack ID
+                      </button>
+                      <button className="button" type="button" onClick={() => void handlePlinksStep("tx1")}>
+                        Send Tx1
+                      </button>
+                    </div>
+                    <div className="kv">
+                      <span className="kv-label">Detected pack ID</span>
+                      <span className="kv-value">{plinksPackId || "Belum ada pack ID"}</span>
+                    </div>
+                    <div className="kv">
+                      <span className="kv-label">Tx1 hash</span>
+                      <span className="kv-value">{plinksTx1Hash || "Belum ada tx1"}</span>
+                    </div>
+                    <div className="kv">
+                      <span className="kv-label">Step 2 input: drop response JSON</span>
+                      <textarea
+                        className="field field-area"
+                        value={plinksDropJson}
+                        onChange={(event) => setPlinksDropJson(event.target.value)}
+                        placeholder='Paste response dari /api/game/.../drop'
+                      />
+                    </div>
+                    <div className="button-row">
+                      <button className="button secondary" type="button" onClick={handleLoadTx2Data}>
+                        Load Tx2 Payload
+                      </button>
+                      <button className="button" type="button" onClick={() => void handlePlinksStep("tx2")}>
+                        Send Tx2
+                      </button>
+                    </div>
+                    <div className="kv">
+                      <span className="kv-label">Tx2 hash</span>
+                      <span className="kv-value">{plinksTx2Hash || "Belum ada tx2"}</span>
+                    </div>
+                  </>
+                ) : null}
                 <div className="grid-two">
                   <div className="kv">
                     <span className="kv-label">RPC URL</span>
@@ -552,11 +633,13 @@ export function AutomationDashboard() {
                     placeholder="0x"
                   />
                 </div>
-                <div className="button-row">
-                  <button className="button" type="button" onClick={handleRunTransaction}>
-                    {moduleKey === "plinks" ? "Run Plinks Flow" : "Send Custom Transaction"}
-                  </button>
-                </div>
+                {moduleKey === "custom" ? (
+                  <div className="button-row">
+                    <button className="button" type="button" onClick={handleRunTransaction}>
+                      Send Custom Transaction
+                    </button>
+                  </div>
+                ) : null}
                 <div className={`message ${txStatus === "error" ? "error" : txStatus === "success" ? "success" : "info"}`}>
                   {txMessage}
                 </div>
@@ -572,8 +655,9 @@ export function AutomationDashboard() {
         <aside className="card main-card">
           <h2 className="card-title">Plinks workflow</h2>
           <p className="card-copy">
-            Runner ini memakai flow dua tahap yang kamu capture dari network
-            Plinks. Log terbaru akan tampil di bawah untuk membantu debugging.
+            Workflow Plinks sekarang dipisah: parse reserve response, kirim tx1,
+            paste drop response, lalu kirim tx2. Jadi lebih cocok untuk debugging
+            dan tidak bergantung pada satu tombol blind automation.
           </p>
           <div className="stack">
             <div className="kv">
