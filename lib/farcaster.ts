@@ -31,24 +31,26 @@ export function buildFrameEmbed() {
 export function buildMiniAppManifest() {
   const baseUrl = getBaseUrl();
   const accountAssociation = getAccountAssociation();
+  const miniapp = {
+    version: "1",
+    name: getAppName(),
+    homeUrl: baseUrl,
+    iconUrl: `${baseUrl}/icon.svg`,
+    imageUrl: `${baseUrl}/feed.svg`,
+    splashImageUrl: `${baseUrl}/splash.svg`,
+    splashBackgroundColor: getSplashBackgroundColor(),
+    buttonTitle: getButtonTitle(),
+    description: getAppDescription(),
+    primaryCategory: getPrimaryCategory(),
+    tags: getTags(),
+    screenshotUrls: [`${baseUrl}/feed.svg`],
+    heroImageUrl: `${baseUrl}/feed.svg`,
+    tagline: "Quick Auth miniapp login",
+  };
 
   return {
     ...(accountAssociation ? { accountAssociation } : {}),
-    frame: {
-      version: "1",
-      name: getAppName(),
-      homeUrl: baseUrl,
-      iconUrl: `${baseUrl}/icon.svg`,
-      imageUrl: `${baseUrl}/feed.svg`,
-      splashImageUrl: `${baseUrl}/splash.svg`,
-      splashBackgroundColor: getSplashBackgroundColor(),
-      buttonTitle: getButtonTitle(),
-      description: getAppDescription(),
-      primaryCategory: getPrimaryCategory(),
-      tags: getTags(),
-      screenshotUrls: [`${baseUrl}/feed.svg`],
-      heroImageUrl: `${baseUrl}/feed.svg`,
-      tagline: "Quick Auth login plus a protected miniapp action",
-    },
+    miniapp,
+    frame: miniapp,
   };
 }
