@@ -14,14 +14,14 @@ export function buildFrameEmbed() {
 
   return {
     version: "next",
-    imageUrl: `${baseUrl}/feed.svg`,
+    imageUrl: `${baseUrl}/hero.png`,
     button: {
       title: getButtonTitle(),
       action: {
         type: "launch_frame",
         name: getAppName(),
         url: baseUrl,
-        splashImageUrl: `${baseUrl}/splash.svg`,
+        splashImageUrl: `${baseUrl}/splash.png`,
         splashBackgroundColor: getSplashBackgroundColor(),
       },
     },
@@ -35,16 +35,16 @@ export function buildMiniAppManifest() {
     version: "1",
     name: getAppName(),
     homeUrl: baseUrl,
-    iconUrl: `${baseUrl}/icon.svg`,
-    imageUrl: `${baseUrl}/feed.svg`,
-    splashImageUrl: `${baseUrl}/splash.svg`,
+    iconUrl: `${baseUrl}/icon.png`,
+    imageUrl: `${baseUrl}/hero.png`,
+    splashImageUrl: `${baseUrl}/splash.png`,
     splashBackgroundColor: getSplashBackgroundColor(),
     buttonTitle: getButtonTitle(),
     description: getAppDescription(),
     primaryCategory: getPrimaryCategory(),
     tags: getTags(),
-    screenshotUrls: [`${baseUrl}/feed.svg`],
-    heroImageUrl: `${baseUrl}/feed.svg`,
+    screenshotUrls: [`${baseUrl}/screenshot-1.png`],
+    heroImageUrl: `${baseUrl}/hero.png`,
     tagline: "Quick Auth miniapp login",
   };
 

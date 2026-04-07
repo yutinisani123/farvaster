@@ -69,4 +69,5 @@ If account association env vars are omitted, the manifest still renders for loca
 
 - In a normal browser, the app renders a safe fallback and does not crash.
 - In Farcaster, the client calls `sdk.actions.ready()` and then authenticates with Quick Auth.
+- Publish-oriented PNG assets are generated in `public/` by `scripts/generate-assets.ps1`.
 - This repo does not include installed dependencies because Node/npm were not available in the current environment while scaffolding.
