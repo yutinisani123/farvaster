@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
   createPublicClient,
   createWalletClient,
@@ -11,6 +11,13 @@ import {
 } from "viem";
 import { encodeFunctionData } from "viem";
 import { mnemonicToAccount, privateKeyToAccount } from "viem/accounts";
+import {
+  clearWorkspace,
+  getLastLoginId,
+  loadEncryptedWorkspace,
+  saveEncryptedWorkspace,
+  workspaceExists,
+} from "@/lib/vault";
 
 type ImportedAccount = {
   id: string;
@@ -24,6 +31,7 @@ type ImportedAccount = {
 
 type ModuleKey = "plinks" | "custom";
 type TransactionStatus = "idle" | "running" | "success" | "error";
+type LoginMode = "locked" | "ready";
 
 type PlinksReserveResponse = {
   success?: boolean;
@@ -45,6 +53,28 @@ type PlinksDropResponse = {
     id?: string;
     status?: string;
   };
+};
+
+type WorkspaceState = {
+  version: 1;
+  savedAt: string;
+  accounts: ImportedAccount[];
+  selectedAccountId: string;
+  moduleKey: ModuleKey;
+  rpcUrl: string;
+  toAddress: string;
+  ethValue: string;
+  calldata: string;
+  txHash: string;
+  txStatus: TransactionStatus;
+  txMessage: string;
+  plinksLog: string[];
+  plinksBearer: string;
+  plinksReserveJson: string;
+  plinksDropJson: string;
+  plinksPackId: string;
+  plinksTx1Hash: string;
+  plinksTx2Hash: string;
 };
 
 const defaultRpc = "https://mainnet.base.org";
@@ -71,10 +101,30 @@ function maskAddress(value: string) {
   return `${value.slice(0, 6)}...${value.slice(-4)}`;
 }
 
+function getJsonPasteHint(value: string, kind: "reserve" | "drop") {
+  const trimmed = value.trim();
+
+  if (!trimmed) {
+    return "";
+  }
+
+  if (trimmed.startsWith("/") || trimmed.startsWith("http")) {
+    return `Paste isi Response JSON ${kind}, bukan URL/path request.`;
+  }
+
+  return "";
+}
+
 export function AutomationDashboard() {
+  const [loginMode, setLoginMode] = useState<LoginMode>("locked");
+  const [loginId, setLoginId] = useState("");
+  const [loginPassword, setLoginPassword] = useState("");
+  const [loginMessage, setLoginMessage] = useState(
+    "Buat login ID + password lokal untuk menyimpan session dan field workflow setelah refresh.",
+  );
   const [accounts, setAccounts] = useState<ImportedAccount[]>([]);
   const [sessionMessage, setSessionMessage] = useState(
-    "Session-only mode aktif. Akun hanya hidup selama tab ini terbuka.",
+    "Workspace terenkripsi siap. Data akan tetap ada setelah refresh.",
   );
   const [label, setLabel] = useState("");
   const [secretValue, setSecretValue] = useState("");
@@ -107,9 +157,178 @@ export function AutomationDashboard() {
     () => accounts.find((item) => item.id === selectedAccountId) ?? null,
     [accounts, selectedAccountId],
   );
+  const reserveJsonHint = getJsonPasteHint(plinksReserveJson, "reserve");
+  const dropJsonHint = getJsonPasteHint(plinksDropJson, "drop");
+  const canSendTx1 = Boolean(selectedAccountId && plinksPackId.trim());
+  const canLoadTx2 = Boolean(plinksDropJson.trim()) && !dropJsonHint;
+  const canSendTx2 = Boolean(selectedAccountId && calldata.trim() !== "0x" && canLoadTx2);
+
+  useEffect(() => {
+    const lastLoginId = getLastLoginId();
+
+    if (lastLoginId) {
+      setLoginId(lastLoginId);
+      setLoginMessage(`Workspace terakhir terdeteksi untuk ID "${lastLoginId}".`);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (loginMode !== "ready" || !loginId.trim() || !loginPassword.trim()) {
+      return;
+    }
+
+    const workspace: WorkspaceState = {
+      version: 1,
+      savedAt: new Date().toISOString(),
+      accounts,
+      selectedAccountId,
+      moduleKey,
+      rpcUrl,
+      toAddress,
+      ethValue,
+      calldata,
+      txHash,
+      txStatus,
+      txMessage,
+      plinksLog,
+      plinksBearer,
+      plinksReserveJson,
+      plinksDropJson,
+      plinksPackId,
+      plinksTx1Hash,
+      plinksTx2Hash,
+    };
+
+    void saveEncryptedWorkspace(loginId.trim(), loginPassword, workspace);
+  }, [
+    accounts,
+    calldata,
+    ethValue,
+    loginId,
+    loginMode,
+    loginPassword,
+    moduleKey,
+    plinksBearer,
+    plinksDropJson,
+    plinksLog,
+    plinksPackId,
+    plinksReserveJson,
+    plinksTx1Hash,
+    plinksTx2Hash,
+    rpcUrl,
+    selectedAccountId,
+    toAddress,
+    txHash,
+    txMessage,
+    txStatus,
+  ]);
 
   function addLog(message: string) {
     setPlinksLog((current) => [message, ...current].slice(0, 10));
+  }
+
+  async function handleWorkspaceLogin() {
+    try {
+      if (!loginId.trim()) {
+        throw new Error("Isi login ID dulu.");
+      }
+
+      if (!loginPassword.trim()) {
+        throw new Error("Isi password dulu.");
+      }
+
+      const exists = workspaceExists(loginId.trim());
+
+      if (!exists) {
+        const freshWorkspace: WorkspaceState = {
+          version: 1,
+          savedAt: new Date().toISOString(),
+          accounts: [],
+          selectedAccountId: "",
+          moduleKey: "plinks",
+          rpcUrl: defaultRpc,
+          toAddress: plinksContract,
+          ethValue: "0",
+          calldata: "0x",
+          txHash: "",
+          txStatus: "idle",
+          txMessage: "Workspace baru dibuat. Semua perubahan akan autosave.",
+          plinksLog: [],
+          plinksBearer: "",
+          plinksReserveJson: "",
+          plinksDropJson: "",
+          plinksPackId: "",
+          plinksTx1Hash: "",
+          plinksTx2Hash: "",
+        };
+
+        await saveEncryptedWorkspace(loginId.trim(), loginPassword, freshWorkspace);
+        setLoginMessage(`Workspace baru dibuat untuk ID "${loginId.trim()}".`);
+      }
+
+      const workspace = await loadEncryptedWorkspace<WorkspaceState>(loginId.trim(), loginPassword);
+
+      if (!workspace) {
+        throw new Error("Workspace tidak ditemukan.");
+      }
+
+      setAccounts(workspace.accounts);
+      setSelectedAccountId(workspace.selectedAccountId);
+      setModuleKey(workspace.moduleKey);
+      setRpcUrl(workspace.rpcUrl);
+      setToAddress(workspace.toAddress);
+      setEthValue(workspace.ethValue);
+      setCalldata(workspace.calldata);
+      setTxHash(workspace.txHash);
+      setTxStatus(workspace.txStatus);
+      setTxMessage(workspace.txMessage);
+      setPlinksLog(workspace.plinksLog);
+      setPlinksBearer(workspace.plinksBearer);
+      setPlinksReserveJson(workspace.plinksReserveJson);
+      setPlinksDropJson(workspace.plinksDropJson);
+      setPlinksPackId(workspace.plinksPackId);
+      setPlinksTx1Hash(workspace.plinksTx1Hash);
+      setPlinksTx2Hash(workspace.plinksTx2Hash);
+      setLoginMode("ready");
+      setSessionMessage("Workspace terbuka. Semua input akan autosave setelah refresh.");
+    } catch (error) {
+      setLoginMessage(getErrorMessage(error));
+    }
+  }
+
+  function handleWorkspaceLogout() {
+    setLoginMode("locked");
+    setLoginPassword("");
+    setLoginMessage("Workspace dikunci. Buka lagi dengan login ID dan password yang sama.");
+  }
+
+  function handleClearSavedWorkspace() {
+    if (!loginId.trim()) {
+      setLoginMessage("Isi login ID dulu sebelum menghapus workspace.");
+      return;
+    }
+
+    clearWorkspace(loginId.trim());
+    setAccounts([]);
+    setSelectedAccountId("");
+    setModuleKey("plinks");
+    setRpcUrl(defaultRpc);
+    setToAddress(plinksContract);
+    setEthValue("0");
+    setCalldata("0x");
+    setTxHash("");
+    setTxStatus("idle");
+    setTxMessage("Workspace dihapus. Buka lagi untuk mulai dari kosong.");
+    setPlinksLog([]);
+    setPlinksBearer("");
+    setPlinksReserveJson("");
+    setPlinksDropJson("");
+    setPlinksPackId("");
+    setPlinksTx1Hash("");
+    setPlinksTx2Hash("");
+    setLoginMode("locked");
+    setLoginPassword("");
+    setLoginMessage(`Workspace untuk ID "${loginId.trim()}" sudah dihapus.`);
   }
 
   function deriveAddress(kind: ImportedAccount["kind"], secret: string, index: number) {
@@ -178,6 +397,10 @@ export function AutomationDashboard() {
   }
 
   function parseReserveJson() {
+    if (reserveJsonHint) {
+      throw new Error(reserveJsonHint);
+    }
+
     const parsed = JSON.parse(plinksReserveJson) as PlinksReserveResponse;
     const packId = parsed.pack?.id;
 
@@ -191,6 +414,10 @@ export function AutomationDashboard() {
   }
 
   function parseDropJson() {
+    if (dropJsonHint) {
+      throw new Error(dropJsonHint);
+    }
+
     const parsed = JSON.parse(plinksDropJson) as PlinksDropResponse;
 
     if (!parsed.transactionData || !/^0x[0-9a-fA-F]+$/.test(parsed.transactionData)) {
@@ -382,15 +609,78 @@ export function AutomationDashboard() {
 
   const totalAccounts = accounts.length;
 
+  if (loginMode === "locked") {
+    return (
+      <main className="page-shell">
+        <section className="hero">
+          <div className="eyebrow">Local Workspace Login</div>
+          <h1 className="title">Buka workspace tersimpan untuk automation.</h1>
+          <p className="lede">
+            Login ini hanya lokal di browser kamu. Gunanya untuk menyimpan akun, field JSON,
+            pack ID, dan progress step Plinks agar tidak hilang saat refresh.
+          </p>
+        </section>
+
+        <section className="layout-grid">
+          <article className="card main-card">
+            <div className="sections">
+              <section className="card info-card">
+                <h2 className="card-title">Login Workspace</h2>
+                <p className="card-copy">
+                  Kalau login ID belum pernah dipakai, app akan membuat workspace baru.
+                  Kalau sudah ada, password yang sama akan membuka data tersimpan.
+                </p>
+                <div className="stack">
+                  <div className="kv">
+                    <span className="kv-label">Login ID</span>
+                    <input
+                      className="field"
+                      value={loginId}
+                      onChange={(event) => setLoginId(event.target.value)}
+                      placeholder="Contoh: yutini-main"
+                    />
+                  </div>
+                  <div className="kv">
+                    <span className="kv-label">Password</span>
+                    <input
+                      className="field"
+                      type="password"
+                      value={loginPassword}
+                      onChange={(event) => setLoginPassword(event.target.value)}
+                      placeholder="Buat password lokal"
+                    />
+                  </div>
+                  <div className="button-row">
+                    <button className="button" type="button" onClick={handleWorkspaceLogin}>
+                      Open Workspace
+                    </button>
+                  </div>
+                  <div className="message info">{loginMessage}</div>
+                </div>
+              </section>
+            </div>
+          </article>
+
+          <aside className="card main-card">
+            <h2 className="card-title">Catatan</h2>
+            <p className="card-copy">
+              Password ini bukan password Farcaster. Ini hanya kunci lokal untuk
+              mengenkripsi workspace di browser yang sama.
+            </p>
+          </aside>
+        </section>
+      </main>
+    );
+  }
+
   return (
     <main className="page-shell">
       <section className="hero">
-        <div className="eyebrow">Session Multi Account | Miniapp Automation</div>
+        <div className="eyebrow">Saved Workspace | Miniapp Automation</div>
         <h1 className="title">Dashboard akun banyak untuk automation miniapp.</h1>
         <p className="lede">
-          Tool ini sekarang jalan dalam session-only mode. Akun tidak disimpan
-          permanen, jadi lebih aman untuk eksperimen multi-account dan workflow
-          tx seperti Plinks di Base.
+          Workspace kamu sekarang autosave. Jadi akun, pack ID, JSON reserve/drop,
+          dan step workflow tidak akan hilang saat halaman direfresh.
         </p>
       </section>
 
@@ -398,21 +688,26 @@ export function AutomationDashboard() {
         <article className="card main-card">
           <div className="status-pill">
             <span className="dot" />
-            <span>{totalAccounts} session accounts loaded</span>
+            <span>{totalAccounts} saved accounts loaded</span>
           </div>
 
           <div className="sections">
             <section className="card info-card">
-              <h2 className="card-title">Session-only accounts</h2>
+              <h2 className="card-title">Workspace session</h2>
               <p className="card-copy">
-                Tidak ada vault password lagi. Semua akun hanya hidup selama tab
-                browser ini terbuka dan akan hilang saat refresh atau close.
+                Semua perubahan di halaman ini otomatis disimpan ke browser ini dengan login ID yang sedang terbuka.
               </p>
               <div className="stack">
                 <div className="message info">{sessionMessage}</div>
                 <div className="button-row">
+                  <button className="button secondary" type="button" onClick={handleWorkspaceLogout}>
+                    Lock Workspace
+                  </button>
+                  <button className="button secondary" type="button" onClick={handleClearSavedWorkspace}>
+                    Delete Workspace
+                  </button>
                   <button className="button secondary" type="button" onClick={clearSessionAccounts}>
-                    Clear Session Accounts
+                    Clear Accounts
                   </button>
                 </div>
               </div>
@@ -422,8 +717,7 @@ export function AutomationDashboard() {
               <section className="card info-card">
                 <h2 className="card-title">Import akun</h2>
                 <p className="card-copy">
-                  Untuk mode Plinks, field secret dipakai sebagai
-                  mnemonic/private key akun yang akan menandatangani tx onchain.
+                  Mnemonic/private key yang kamu isi akan ikut tersimpan di workspace terenkripsi lokal ini.
                 </p>
                 <div className="stack">
                   <div className="kv">
@@ -466,17 +760,16 @@ export function AutomationDashboard() {
                     />
                   </div>
                   <button className="button" type="button" onClick={handleImportAccount}>
-                    Import Session Account
+                    Import Saved Account
                   </button>
                   <div className="message info">{importMessage}</div>
                 </div>
               </section>
 
               <section className="card info-card">
-                <h2 className="card-title">Akun session</h2>
+                <h2 className="card-title">Akun tersimpan</h2>
                 <p className="card-copy">
-                  Pilih akun yang ingin dipakai. Untuk mode Plinks, akun ini akan
-                  mengirim tx1 dan tx2 langsung ke contract target di Base.
+                  Pilih akun yang ingin dipakai. Setelah refresh, pilihan ini tetap tersimpan.
                 </p>
                 <div className="stack">
                   <select
@@ -506,9 +799,7 @@ export function AutomationDashboard() {
             <section className="card action-card">
               <h2 className="card-title">Module runner</h2>
               <p className="card-copy">
-                Preset `Plinks` sekarang dibuat sebagai workflow steps. Step API
-                tetap kamu ambil/manual dari DevTools Plinks, lalu tool ini
-                menangani step onchain yang relevan.
+                Plinks sekarang dipisah per langkah dan semua input akan tetap ada setelah refresh.
               </p>
               <div className="stack">
                 <div className="kv">
@@ -530,7 +821,7 @@ export function AutomationDashboard() {
                         className="field"
                         value={plinksBearer}
                         onChange={(event) => setPlinksBearer(event.target.value)}
-                        placeholder="Tidak dipakai otomatis, hanya catatan session"
+                        placeholder="Simpan catatan token/session di workspace"
                       />
                     </div>
                     <div className="kv">
@@ -539,14 +830,20 @@ export function AutomationDashboard() {
                         className="field field-area"
                         value={plinksReserveJson}
                         onChange={(event) => setPlinksReserveJson(event.target.value)}
-                        placeholder='Paste response dari /api/packs/reserve/free'
+                        placeholder='Paste response JSON dari /api/packs/reserve/free'
                       />
                     </div>
+                    {reserveJsonHint ? <div className="message error">{reserveJsonHint}</div> : null}
                     <div className="button-row">
                       <button className="button secondary" type="button" onClick={handleReservePackId}>
                         Parse Pack ID
                       </button>
-                      <button className="button" type="button" onClick={() => void handlePlinksStep("tx1")}>
+                      <button
+                        className="button"
+                        type="button"
+                        disabled={!canSendTx1}
+                        onClick={() => void handlePlinksStep("tx1")}
+                      >
                         Send Tx1
                       </button>
                     </div>
@@ -564,14 +861,20 @@ export function AutomationDashboard() {
                         className="field field-area"
                         value={plinksDropJson}
                         onChange={(event) => setPlinksDropJson(event.target.value)}
-                        placeholder='Paste response dari /api/game/.../drop'
+                        placeholder='Paste response JSON dari /api/game/.../drop'
                       />
                     </div>
+                    {dropJsonHint ? <div className="message error">{dropJsonHint}</div> : null}
                     <div className="button-row">
                       <button className="button secondary" type="button" onClick={handleLoadTx2Data}>
                         Load Tx2 Payload
                       </button>
-                      <button className="button" type="button" onClick={() => void handlePlinksStep("tx2")}>
+                      <button
+                        className="button"
+                        type="button"
+                        disabled={!canSendTx2}
+                        onClick={() => void handlePlinksStep("tx2")}
+                      >
                         Send Tx2
                       </button>
                     </div>
@@ -656,10 +959,14 @@ export function AutomationDashboard() {
           <h2 className="card-title">Plinks workflow</h2>
           <p className="card-copy">
             Workflow Plinks sekarang dipisah: parse reserve response, kirim tx1,
-            paste drop response, lalu kirim tx2. Jadi lebih cocok untuk debugging
-            dan tidak bergantung pada satu tombol blind automation.
+            paste drop response, lalu kirim tx2. Workspace ini autosave sehingga
+            kamu tidak perlu isi ulang semua field setelah refresh.
           </p>
           <div className="stack">
+            <div className="kv">
+              <span className="kv-label">Workspace ID</span>
+              <span className="kv-value">{loginId || "Unknown"}</span>
+            </div>
             <div className="kv">
               <span className="kv-label">Preset contract</span>
               <span className="kv-value">{plinksContract}</span>
