@@ -1,6 +1,5 @@
-import { MiniappShell } from "@/components/miniapp-shell";
+import { AutomationDashboard } from "@/components/automation-dashboard";
 
 export default function HomePage() {
-  return <MiniappShell />;
+  return <AutomationDashboard />;
 }
-

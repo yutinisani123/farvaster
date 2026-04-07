@@ -30,13 +30,13 @@ export function getQuickAuthServerOrigin() {
 }
 
 export function getAppName() {
-  return process.env.FARCASTER_APP_NAME?.trim() || "Farcaster Login Tool";
+  return process.env.FARCASTER_APP_NAME?.trim() || "Farcaster Automation Vault";
 }
 
 export function getAppDescription() {
   return (
     process.env.FARCASTER_APP_DESCRIPTION?.trim() ||
-    "Quick Auth demo mini app with a protected backend action."
+    "Local multi-account dashboard for Farcaster-targeted transaction workflows."
   );
 }
 

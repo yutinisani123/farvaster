@@ -1,10 +1,10 @@
-# Farcaster Mini App Login Tool
+# Farcaster Automation Vault
 
-Next.js mini app template for Farcaster with:
+Next.js dashboard for local-first Farcaster account automation with:
 
-- Quick Auth login via `@farcaster/miniapp-sdk`
-- backend token validation via `@farcaster/quick-auth`
-- protected `/api/me` and `/api/action` demo endpoints
+- local encrypted vault for many accounts
+- mnemonic/private-key import in the browser
+- modular EVM transaction runner for miniapp-targeted flows
 - Farcaster manifest at `/.well-known/farcaster.json`
 
 ## Requirements
@@ -60,14 +60,13 @@ If account association env vars are omitted, the manifest still renders for loca
 
 ## Routes
 
-- `/`: Mini App UI
+- `/`: Multi-account automation dashboard
 - `/api/me`: validate Quick Auth token and return Farcaster user info
 - `/api/action`: protected action demo
 - `/.well-known/farcaster.json`: Farcaster Mini App manifest
 
 ## Notes
 
-- In a normal browser, the app renders a safe fallback and does not crash.
-- In Farcaster, the client calls `sdk.actions.ready()` and then authenticates with Quick Auth.
+- The vault is stored only in local browser storage and encrypted with the password you enter in the UI.
+- This project now acts as a local-first automation panel. A specific miniapp integration such as `Plinks` still requires the target contract/API details before full automation can be hardcoded.
 - Publish-oriented PNG assets are generated in `public/` by `scripts/generate-assets.ps1`.
-- This repo does not include installed dependencies because Node/npm were not available in the current environment while scaffolding.

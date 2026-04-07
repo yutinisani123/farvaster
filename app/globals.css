@@ -253,6 +253,25 @@ textarea {
   line-height: 1.7;
 }
 
+.field {
+  width: 100%;
+  min-height: 50px;
+  padding: 12px 14px;
+  border: 1px solid rgba(146, 180, 255, 0.16);
+  border-radius: 14px;
+  background: rgba(4, 11, 22, 0.76);
+  color: var(--text);
+}
+
+.field::placeholder {
+  color: #6f83a6;
+}
+
+.field-area {
+  min-height: 128px;
+  resize: vertical;
+}
+
 @media (min-width: 860px) {
   .hero {
     padding: 36px 24px 20px;
