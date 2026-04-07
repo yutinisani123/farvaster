@@ -1,0 +1,29 @@
+<svg width="1200" height="800" viewBox="0 0 1200 800" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <rect width="1200" height="800" fill="#06101D"/>
+  <circle cx="207" cy="104" r="250" fill="#163F87" fill-opacity="0.45"/>
+  <circle cx="1062" cy="706" r="294" fill="#0F766E" fill-opacity="0.35"/>
+  <rect x="72" y="78" width="1056" height="644" rx="40" fill="#0B1627" fill-opacity="0.92" stroke="#8EB8FF" stroke-opacity="0.16" stroke-width="2"/>
+  <rect x="122" y="128" width="202" height="42" rx="21" fill="#0D2036" stroke="#8EB8FF" stroke-opacity="0.18"/>
+  <text x="146" y="156" fill="#B0C2E8" font-size="22" font-family="Arial, sans-serif">Farcaster Mini App</text>
+  <text x="122" y="264" fill="#F4F8FF" font-size="88" font-weight="700" font-family="Arial, sans-serif">Quick Auth Login</text>
+  <text x="122" y="340" fill="#F4F8FF" font-size="88" font-weight="700" font-family="Arial, sans-serif">&amp; Protected Actions</text>
+  <text x="122" y="408" fill="#8EA5CD" font-size="30" font-family="Arial, sans-serif">Authenticate natively inside Farcaster, verify on the backend, and</text>
+  <text x="122" y="450" fill="#8EA5CD" font-size="30" font-family="Arial, sans-serif">run secure miniapp interactions with one seamless flow.</text>
+  <rect x="122" y="528" width="270" height="84" rx="24" fill="url(#paint0_linear)"/>
+  <text x="170" y="580" fill="#03101C" font-size="34" font-weight="700" font-family="Arial, sans-serif">Open Mini App</text>
+  <rect x="720" y="194" width="310" height="360" rx="28" fill="#0E1A2D" stroke="#8EB8FF" stroke-opacity="0.18"/>
+  <text x="758" y="248" fill="#B0C2E8" font-size="20" font-family="Arial, sans-serif">Verified session</text>
+  <text x="758" y="316" fill="#F4F8FF" font-size="60" font-weight="700" font-family="Arial, sans-serif">fid 6841</text>
+  <text x="758" y="368" fill="#8EA5CD" font-size="24" font-family="Arial, sans-serif">username: demo-user</text>
+  <rect x="758" y="420" width="234" height="56" rx="18" fill="#11263D"/>
+  <text x="784" y="455" fill="#7DD3FC" font-size="22" font-family="Arial, sans-serif">Bearer token attached</text>
+  <rect x="758" y="496" width="210" height="24" rx="12" fill="#16324E"/>
+  <rect x="758" y="536" width="174" height="24" rx="12" fill="#16324E"/>
+  <defs>
+    <linearGradient id="paint0_linear" x1="146" y1="534" x2="392" y2="626" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#7DD3FC"/>
+      <stop offset="1" stop-color="#14B8A6"/>
+    </linearGradient>
+  </defs>
+</svg>
+
